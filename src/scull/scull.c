@@ -232,7 +232,7 @@ static void scull_setup_cdev(struct scull_dev *dev, int index) {
          scull_major, scull_minor + index);
 }
 
-static void __exit scull_cleanup_module(void) {
+static void scull_cleanup_module(void) {
   int i;
   dev_t devno = MKDEV(scull_major, scull_minor);
 
