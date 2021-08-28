@@ -1,0 +1,13 @@
+# ignore objects and archives
+*.[oa]
+
+# ignore kernel module objects
+*.ko
+*.mod.c
+*.mod
+
+# ignore .cmd
+*.cmd
+
+Module.symvers
+modules.order
