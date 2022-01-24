@@ -17,6 +17,7 @@ Memory layout:
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
 #include <linux/uaccess.h>
@@ -29,75 +30,22 @@ int scull_major = 0;
 int scull_minor = 0;
 int scull_quantum = 4000;
 int scull_qset = 1000;
-
-static int sex = 69;
-static int weed = 420;
-module_param(sex, int, 0660);
-module_param(weed, int, 0660);
+static struct proc_dir_entry *ent;
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Nick Bellamy");
 MODULE_DESCRIPTION("Scull exercise from LDD3");
 MODULE_VERSION("69.420");
 
-static struct proc_dir_entry *ent;
-
-static ssize_t scull_proc_write(struct file *f, const char __user *ubuf, size_t count, loff_t *ppos) {
-  int s, w, c, res;
-  char buf[BUFSIZE];
-
-  printk(KERN_INFO "proc write handler\n");
-
-  if (*ppos > 0 || count > BUFSIZE)
-    return -EFAULT;
-
-  if (copy_from_user(buf, ubuf, count))
-    return -EFAULT;
-
-  res = sscanf(buf, "%d %d", &s, &w);
-
-  if (res != 2)
-    return -EFAULT;
-
-  sex = s;
-  weed = w;
-
-  c = strlen(buf);
-  *ppos = c;
-  return c;
-}
-
-static ssize_t scull_proc_read(struct file *f, char __user *ubuf, size_t count, loff_t *ppos) {
-  char buf[BUFSIZE];
-  int len = 0;
-
-  printk(KERN_DEBUG "proc read handler\n");
-  if (*ppos > 0 || count < BUFSIZE)
-    return 0;
-
-  len += sprintf(buf, "sex = %d\n", sex);
-  len += sprintf(buf + len, "weed = %d\n", weed);
-
-  if (copy_to_user(ubuf, buf, len))
-    return -EFAULT;
-
-  *ppos = len;
-  return len;
-}
-
-static struct file_operations scull_proc_fops = {
-  .owner = THIS_MODULE,
-  .read = scull_proc_read,
-  .write = scull_proc_write,
-};
-
 struct scull_dev *scull_devices;
 
-struct scull_qset *scull_follow(struct scull_dev *dev, int n) {
+struct scull_qset *scull_follow(struct scull_dev *dev, int n)
+{
   struct scull_qset *qs = dev->data;
 
   // Allocate the first qset explicitly if needed.
-  if (!qs) {
+  if (!qs)
+  {
     qs = dev->data = kmalloc(sizeof(struct scull_qset), GFP_KERNEL);
     if (qs == NULL)
       return NULL;
@@ -105,8 +53,10 @@ struct scull_qset *scull_follow(struct scull_dev *dev, int n) {
   }
 
   // Then follow the linked list.
-  while (n--) {
-    if (!qs->next) {
+  while (n--)
+  {
+    if (!qs->next)
+    {
       qs->next = kmalloc(sizeof(struct scull_qset), GFP_KERNEL);
       if (qs->next == NULL)
         return NULL;
@@ -118,7 +68,8 @@ struct scull_qset *scull_follow(struct scull_dev *dev, int n) {
 };
 
 ssize_t scull_read(struct file *filp, char __user *buf, size_t count,
-                   loff_t *f_pos) {
+                   loff_t *f_pos)
+{
   // Our device has a linked list of "items" which contain quantum sets.
   // Based on the f_pos/offset we seek to the item, then the quantum set, then
   // the quantum, and read to the end of that quantum.
@@ -159,7 +110,8 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count,
   if (count > quantum - q_pos)
     count = quantum - q_pos;
 
-  if (copy_to_user(buf, dptr->data[s_pos] + q_pos, count)) {
+  if (copy_to_user(buf, dptr->data[s_pos] + q_pos, count))
+  {
     retval = -EFAULT;
     goto out;
   }
@@ -172,7 +124,8 @@ out:
 };
 
 ssize_t scull_write(struct file *filp, const char __user *buf, size_t count,
-                    loff_t *f_pos) {
+                    loff_t *f_pos)
+{
   struct scull_dev *dev = filp->private_data;
   struct scull_qset *dptr = dev->data;
   int quantum = dev->quantum, qset = dev->qset;
@@ -195,14 +148,16 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count,
   if (dptr == NULL)
     goto out;
 
-  if (!dptr->data) {
+  if (!dptr->data)
+  {
     dptr->data = kmalloc(qset * sizeof(char *), GFP_KERNEL);
     if (!dptr->data)
       goto out;
     memset(dptr->data, 0, sizeof(qset * sizeof(char *)));
   }
 
-  if (!dptr->data[s_pos]) {
+  if (!dptr->data[s_pos])
+  {
     dptr->data[s_pos] = kmalloc(quantum, GFP_KERNEL);
     if (!dptr->data[s_pos])
       goto out;
@@ -212,7 +167,8 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count,
   if (count > quantum - q_pos)
     count = quantum - q_pos;
 
-  if (copy_from_user(dptr->data[s_pos] + q_pos, buf, count)) {
+  if (copy_from_user(dptr->data[s_pos] + q_pos, buf, count))
+  {
     retval = -EFAULT;
     goto out;
   }
@@ -230,13 +186,16 @@ out:
 }
 
 // Clear out all the data in the quantum set.
-static void scull_trim(struct scull_dev *dev) {
+static void scull_trim(struct scull_dev *dev)
+{
   struct scull_qset *next, *dptr;
   int qset = dev->qset;
   int i;
 
-  for (dptr = dev->data; dptr; dptr = next) {
-    if (dptr->data) {
+  for (dptr = dev->data; dptr; dptr = next)
+  {
+    if (dptr->data)
+    {
       for (i = 0; i < qset; i++)
         kfree(dptr->data[i]);
       kfree(dptr->data);
@@ -251,14 +210,16 @@ static void scull_trim(struct scull_dev *dev) {
   dev->data = NULL;
 };
 
-int scull_open(struct inode *inode, struct file *filp) {
+int scull_open(struct inode *inode, struct file *filp)
+{
   struct scull_dev *dev; // device information
 
   dev = container_of(inode->i_cdev, struct scull_dev, cdev);
   filp->private_data = dev;
 
   // trim device length to 0 if opened write-only
-  if ((filp->f_flags & O_ACCMODE) == O_WRONLY) {
+  if ((filp->f_flags & O_ACCMODE) == O_WRONLY)
+  {
     scull_trim(dev);
   }
 
@@ -275,14 +236,16 @@ struct file_operations scull_fops = {
     .release = scull_release,
 };
 
-static void scull_setup_cdev(struct scull_dev *dev, int index) {
+static void scull_setup_cdev(struct scull_dev *dev, int index)
+{
   int err, devno = MKDEV(scull_major, scull_minor + index);
 
   cdev_init(&dev->cdev, &scull_fops);
   dev->cdev.owner = THIS_MODULE;
   dev->cdev.ops = &scull_fops;
   err = cdev_add(&dev->cdev, devno, 1 /*count*/);
-  if (err) {
+  if (err)
+  {
     printk(KERN_ERR "Error %d adding scull%d\n", err, index);
     return;
   }
@@ -291,13 +254,78 @@ static void scull_setup_cdev(struct scull_dev *dev, int index) {
          scull_major, scull_minor + index);
 }
 
-static void scull_cleanup_module(void) {
+static void *scull_seq_start(struct seq_file *sfile, loff_t *pos)
+{
+  if (*pos >= scull_nr_devs)
+    return NULL;
+  return scull_devices + *pos;
+}
+
+static void *scull_seq_next(struct seq_file *sfile, void *v, loff_t *pos)
+{
+  (*pos)++;
+  if (*pos >= scull_nr_devs)
+    return NULL;
+  return scull_devices + *pos;
+}
+
+void scull_seq_stop(struct seq_file *sfile, void *v) {
+  return;
+}
+
+int scull_seq_show(struct seq_file *sfile, void *v)
+{
+  struct scull_dev *dev = (struct scull_dev *)v;
+  struct scull_qset *d;
+  int i;
+
+  if (mutex_lock_interruptible(&dev->mu))
+    return -ERESTARTSYS;
+
+  seq_printf(sfile, "\nDevice %i: qset %i, q %i, sz %li\n", (int)(dev - scull_devices), dev->qset, dev->quantum, dev->size);
+
+  for (d = dev->data; d; d = d->next) {
+    seq_printf(sfile, "  item at 0x%p, qset at 0x%p\n", d, d->data);
+    if (d->data && !d->next) {
+      for (i = 0; i < dev->qset; i++) {
+        if (d->data[i])
+          seq_printf(sfile, "    % 4i: 0x%8p\n", i, d->data[i]);
+      }
+    }
+  }
+  mutex_unlock(&dev->mu);
+  return 0;
+}
+
+static struct seq_operations scull_seq_ops = {
+  .start = scull_seq_start,
+  .next = scull_seq_next,
+  .stop = scull_seq_stop,
+  .show = scull_seq_show
+};
+
+static int scull_proc_open(struct inode *inode, struct file *f) {
+  return seq_open(f, &scull_seq_ops);
+}
+
+static struct file_operations scull_proc_fops = {
+    .owner = THIS_MODULE,
+    .open = scull_proc_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = seq_release,
+};
+
+static void scull_cleanup_module(void)
+{
   int i;
   dev_t devno = MKDEV(scull_major, scull_minor);
 
   // Get rid of char device entries.
-  if (scull_devices) {
-    for (i = 0; i < scull_nr_devs; i++) {
+  if (scull_devices)
+  {
+    for (i = 0; i < scull_nr_devs; i++)
+    {
       scull_trim(scull_devices + i);
       cdev_del(&scull_devices[i].cdev);
     }
@@ -309,38 +337,45 @@ static void scull_cleanup_module(void) {
   proc_remove(ent);
 }
 
-static int __init scull_init_module(void) {
+static int __init scull_init_module(void)
+{
   int res, i;
   dev_t dev = 0;
 
-  if (scull_major) {
+  if (scull_major)
+  {
     dev = MKDEV(scull_major, scull_minor);
     res = register_chrdev_region(dev, scull_minor, kModuleName);
-  } else {
+  }
+  else
+  {
     res = alloc_chrdev_region(&dev, scull_minor, scull_nr_devs, kModuleName);
     scull_major = MAJOR(dev);
   }
-  if (res < 0) {
+  if (res < 0)
+  {
     printk(KERN_ERR "scull: can't get major %d: %d\n", scull_major, res);
     return res;
   }
 
   // kmalloc isn't great for larger memory allocations, but it's easier to use.
   scull_devices = kmalloc(scull_nr_devs * sizeof(struct scull_dev), GFP_KERNEL);
-  if (!scull_devices) {
+  if (!scull_devices)
+  {
     res = -ENOMEM;
     goto fail;
   }
   memset(scull_devices, 0, scull_nr_devs * sizeof(struct scull_dev));
 
-  for (i = 0; i < scull_nr_devs; i++) {
+  for (i = 0; i < scull_nr_devs; i++)
+  {
     scull_devices[i].quantum = scull_quantum;
     scull_devices[i].qset = scull_qset;
     mutex_init(&scull_devices[i].mu);
     scull_setup_cdev(&scull_devices[i], i);
   }
 
-  ent = proc_create("mydev", 0660, NULL, &scull_proc_fops);
+  ent = proc_create("scullseq", 0660, NULL, &scull_proc_fops);
 
   printk(KERN_INFO "Init of scull device sucessful.");
   return 0;
