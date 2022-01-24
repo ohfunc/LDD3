@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "kernel.h": "c",
+    "errno.h": "c",
+    "mutex.h": "c",
+    "proc_fs.h": "c"
+  }
+}

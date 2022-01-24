@@ -7,6 +7,8 @@ Memory layout:
       Next -> scull_qset...
       Data -> List[Quantum]
 */
+#include "scull.h"
+
 #include <linux/cdev.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
@@ -14,23 +16,80 @@ Memory layout:
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/proc_fs.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
 #include <linux/uaccess.h>
 
-#include "scull.h"
+#define BUFSIZE 100
 
 const int scull_nr_devs = 3;
 const char *kModuleName = "scull";
-int scull_major = 69;
-int scull_minor = 420;
+int scull_major = 0;
+int scull_minor = 0;
 int scull_quantum = 4000;
 int scull_qset = 1000;
+
+static int sex = 69;
+static int weed = 420;
+module_param(sex, int, 0660);
+module_param(weed, int, 0660);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Nick Bellamy");
 MODULE_DESCRIPTION("Scull exercise from LDD3");
 MODULE_VERSION("69.420");
+
+static struct proc_dir_entry *ent;
+
+static ssize_t scull_proc_write(struct file *f, const char __user *ubuf, size_t count, loff_t *ppos) {
+  int s, w, c, res;
+  char buf[BUFSIZE];
+
+  printk(KERN_INFO "proc write handler\n");
+
+  if (*ppos > 0 || count > BUFSIZE)
+    return -EFAULT;
+
+  if (copy_from_user(buf, ubuf, count))
+    return -EFAULT;
+
+  res = sscanf(buf, "%d %d", &s, &w);
+
+  if (res != 2)
+    return -EFAULT;
+
+  sex = s;
+  weed = w;
+
+  c = strlen(buf);
+  *ppos = c;
+  return c;
+}
+
+static ssize_t scull_proc_read(struct file *f, char __user *ubuf, size_t count, loff_t *ppos) {
+  char buf[BUFSIZE];
+  int len = 0;
+
+  printk(KERN_DEBUG "proc read handler\n");
+  if (*ppos > 0 || count < BUFSIZE)
+    return 0;
+
+  len += sprintf(buf, "sex = %d\n", sex);
+  len += sprintf(buf + len, "weed = %d\n", weed);
+
+  if (copy_to_user(ubuf, buf, len))
+    return -EFAULT;
+
+  *ppos = len;
+  return len;
+}
+
+static struct file_operations scull_proc_fops = {
+  .owner = THIS_MODULE,
+  .read = scull_proc_read,
+  .write = scull_proc_write,
+};
 
 struct scull_dev *scull_devices;
 
@@ -224,11 +283,11 @@ static void scull_setup_cdev(struct scull_dev *dev, int index) {
   dev->cdev.ops = &scull_fops;
   err = cdev_add(&dev->cdev, devno, 1 /*count*/);
   if (err) {
-    printk(KERN_NOTICE "Error %d adding scull%d", err, index);
+    printk(KERN_ERR "Error %d adding scull%d\n", err, index);
     return;
   }
-  printk(KERN_NOTICE
-         "Successfully setup scull device with major %d and minor %d.",
+  printk(KERN_INFO
+         "Successfully setup scull device with major %d and minor %d.\n",
          scull_major, scull_minor + index);
 }
 
@@ -247,6 +306,7 @@ static void scull_cleanup_module(void) {
 
   // cleanup_module is never called if registering failed
   unregister_chrdev_region(devno, scull_nr_devs);
+  proc_remove(ent);
 }
 
 static int __init scull_init_module(void) {
@@ -261,7 +321,7 @@ static int __init scull_init_module(void) {
     scull_major = MAJOR(dev);
   }
   if (res < 0) {
-    printk(KERN_WARNING "scull: can't get major %d\n", scull_major);
+    printk(KERN_ERR "scull: can't get major %d: %d\n", scull_major, res);
     return res;
   }
 
@@ -280,7 +340,9 @@ static int __init scull_init_module(void) {
     scull_setup_cdev(&scull_devices[i], i);
   }
 
-  printk(KERN_NOTICE "Init of scull device sucessful.");
+  ent = proc_create("mydev", 0660, NULL, &scull_proc_fops);
+
+  printk(KERN_INFO "Init of scull device sucessful.");
   return 0;
 
 fail:
